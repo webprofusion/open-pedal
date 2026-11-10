@@ -1,0 +1,85 @@
+{
+  "_comment": "Mechanical layout shared by the KiCad board generator (hardware/kicad/scripts) and the Blender enclosure script (enclosure/build_enclosure.py). All dimensions in mm. Enclosure frame: X across the width (0 = centre, +X = player's right), Y front to rear (0 = centre, +Y = rear panel), Z up from the outside of the base plate. Board frame: u from the board's left edge (player's left), v from the board's rear edge towards the front.",
+
+  "enclosure": {
+    "width": 188.0,
+    "depth": 120.0,
+    "height": 38.0,
+    "wall": 2.5,
+    "corner_radius": 6.0,
+    "base_plate": 2.5
+  },
+
+  "footswitches": {
+    "_comment": "Momentary footswitches with a built-in LED ring around the actuator (four leads: two for the switch, two for the LED). There are no separate indicator LEDs. hole_diameter assumes a 12 mm bushing; confirm it against the switch you buy.",
+    "hole_diameter": 12.2,
+    "ring_diameter": 15.0,
+    "body_diameter": 17.0,
+    "body_depth": 24.0,
+    "items": [
+      {"name": "BANK_DOWN", "label": "BANK -", "x": -67.5, "y": 18.0, "gpio": 0},
+      {"name": "BANK_UP", "label": "BANK +", "x": 67.5, "y": 18.0, "gpio": 1},
+      {"name": "PRESET_A", "label": "A", "x": -67.5, "y": -32.0, "gpio": 2},
+      {"name": "PRESET_B", "label": "B", "x": -22.5, "y": -32.0, "gpio": 3},
+      {"name": "PRESET_C", "label": "C", "x": 22.5, "y": -32.0, "gpio": 4},
+      {"name": "PRESET_D", "label": "D", "x": 67.5, "y": -32.0, "gpio": 5}
+    ]
+  },
+
+  "oled": {
+    "x": 0.0,
+    "y": 18.0,
+    "window": [25.0, 14.0],
+    "module": [27.5, 27.5, 4.0]
+  },
+
+  "board": {
+    "width": 176.0,
+    "depth": 72.0,
+    "thickness": 1.6,
+    "rear_edge_y": 57.0,
+    "top_z": 16.0,
+    "switch_cutout_diameter": 20.0,
+    "mounting_holes": [[5.0, 67.0], [171.0, 67.0], [88.0, 58.0]]
+  },
+
+  "rear_panel": [
+    {"ref": "J2", "name": "PWR", "type": "usb_c", "u": 10.0},
+    {"ref": "J1", "name": "USB", "type": "usb_c", "u": 24.0},
+    {"ref": "J14", "name": "EXP", "type": "jack", "u": 44.0},
+    {"ref": "RV2", "name": "VOLUME", "type": "pot", "u": 62.0},
+    {"ref": "J6", "name": "PHONES", "type": "jack", "u": 80.0},
+    {"ref": "J5", "name": "OUT R", "type": "jack", "u": 102.0},
+    {"ref": "J4", "name": "OUT L/MONO", "type": "jack", "u": 124.0},
+    {"ref": "RV1", "name": "GAIN", "type": "pot", "u": 142.0},
+    {"ref": "J3", "name": "INPUT", "type": "jack", "u": 160.0}
+  ],
+
+  "rear_cutouts": {
+    "_comment": "axis_z is the hole centre height above the top surface of the PCB. KiCad ships no 3D models for these jacks and pots, so the heights are from memory of the Neutrik NMJ, Alps RK09 and USB-C receptacle drawings. Check each against the datasheet of the part you buy before drilling.",
+    "jack": {"diameter": 12.0, "axis_z": 8.0},
+    "pot": {"diameter": 7.5, "axis_z": 6.5},
+    "usb_c": {"width": 12.5, "height": 6.5, "axis_z": 1.7}
+  },
+
+  "holder": {
+    "_comment": "Removable printed device holder along the rear of the top face. The device leans back at angle_deg from horizontal with its bottom edge on a ledge. front_y is the front limit of the holder on the top face (kept behind the bank switches); rise is the height of the device's bottom-rear corner above the top face. A lip hooks hook_drop down behind the rear wall, two legs reach the floor behind the unit (leg_foot_y), and two thumbscrews go into threaded holes in the top face (mount.holes, enclosure X/Y). Arm and jaw 's' values are distances up the slope from the ledge. Each side arm slides in a channel across the backrest and is locked by a knob at lock_x from the centre.",
+    "angle_deg": 60.0,
+    "front_y": 36.5,
+    "rise": 9.0,
+    "width": 186.0,
+    "cheek": 5.0,
+    "backrest": {"height": 66.0, "thickness": 10.0},
+    "ledge": {"depth": 16.0, "lip_height": 9.0, "cable_slot": 18.0},
+    "lightening": {
+      "_comment": "Material removed to save plastic: hexagonal holes through the backrest (hex_flat across flats, rib between them, border left solid at the edges), pockets under the ledge open to the bottom (wall left around them, pocket_ribs across them), and a window in each leg (the leg outline scaled by leg_window).",
+      "hex_flat": 15.0, "rib": 2.5, "border": 3.0, "wall": 3.0, "pocket_ribs": 5, "leg_window": 0.66
+    },
+    "hook_drop": 6.0,
+    "leg_foot_y": [92.0, 108.0],
+    "mount": {"thread": "M4", "hole_diameter": 4.0, "holes": [[-82.0, 30.5], [82.0, 30.5]]},
+    "arms": {"length": 130.0, "width": 16.0, "thickness": 5.0, "s": [30.0, 55.0], "lock_x": 25.0},
+    "jaws": {"s": [22.0, 62.0], "wall": 5.0, "depth": 17.0, "lip": 7.0, "pad": 3.0},
+    "example_devices": {"tablet": [250.0, 175.0, 7.0], "phone": [72.0, 150.0, 8.0]}
+  }
+}

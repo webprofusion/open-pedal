@@ -1,0 +1,17 @@
+Item,Part,Qty,Approx unit cost USD,Approx line cost USD,Notes
+Footswitch,Momentary SPST with LED ring,6,3.00,18.00,12 mm bushing; four leads
+Enclosure,1590DD-size die-cast aluminium,1,12.00,12.00,About 188 x 120 x 38 mm
+PCB,4-layer,1,4.00,4.00,Share of a 5-board order
+Jack,6.35 mm PCB-mount,5,0.60,3.00,"In, out L, out R (switched), phones (TRS), expression (TRS)"
+Controls and passives,"Gain pot, knob, resistors, capacitors, hardware",1,2.50,2.50,
+Headphone stage,"TPA6132A2-class amp, dual 10 k log pot, knob",1,2.00,2.00,
+DAC,PCM5102A,1,2.00,2.00,
+Display,0.96 inch SSD1306 OLED module,1,2.00,2.00,Optional
+Controller,"RP2040, 2 MB QSPI flash, 12 MHz crystal",1,1.80,1.80,
+Power,"Boost converter, three LDOs, ferrite beads, diodes",1,1.50,1.50,
+ADC,PCM1808,1,1.20,1.20,
+USB,"USB-C receptacle x2, USBLC6-2",1,0.80,0.80,
+LED drivers,"2N7002 x6, resistors",1,0.30,0.30,One per footswitch LED ring
+Clock,12.288 MHz oscillator,1,0.50,0.50,
+Op-amp,TLV9062,1,0.40,0.40,
+Total,,,,52.00,Prices are approximate; confirm when ordering

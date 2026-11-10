@@ -1,0 +1,20 @@
+# Firmware build output
+firmware/build/
+
+# KiCad
+*.kicad_prl
+*-backups/
+*.lck
+fp-info-cache
+_autosave-*
+
+# Generated
+__pycache__/
+hardware/kicad/exports/*.glb
+*.blend
+*.blend1
+
+# Editors and OS
+.vscode/
+.DS_Store
+Thumbs.db

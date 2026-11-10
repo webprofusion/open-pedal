@@ -1,0 +1,32 @@
+; DRAFT I2S slave programs for the audio path. They assemble, but have not
+; been run on hardware.
+;
+; The PCM1808 is clock master: 64 BCK per frame, standard I2S (data changes
+; on the falling BCK edge, MSB one BCK after each LRCK edge).
+;
+; Both state machines use the same IN base (the ADC data pin) so that:
+;   pin 0 = ADC data, pin 1 = BCK, pin 2 = LRCK
+; See src/pins.h.
+
+.program i2s_rx_slave
+; Autopush at 32 bits, shift left. Words alternate left, right.
+    wait 1 pin 2
+    wait 0 pin 2        ; LRCK falls: start of the left channel
+    wait 1 pin 1
+    wait 0 pin 1        ; skip the one-bit I2S delay
+.wrap_target
+    wait 1 pin 1
+    in pins, 1          ; sample on the rising edge
+    wait 0 pin 1
+.wrap
+
+.program i2s_tx_slave
+; Autopull at 32 bits, shift left. OUT base = DAC data pin.
+; The TX FIFO must be kept fed: a stall here loses frame alignment.
+    wait 1 pin 2
+    wait 0 pin 2        ; LRCK falls: start of the left channel
+.wrap_target
+    wait 1 pin 1
+    wait 0 pin 1
+    out pins, 1         ; change data on the falling edge
+.wrap
