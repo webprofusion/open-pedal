@@ -3,7 +3,8 @@
     blender --background --python enclosure/build_enclosure.py
 
 Writes enclosure/open-pedal.blend and six renders in enclosure/renders/: the
-bare unit and the removable device holder with a tablet and with a phone.
+bare unit and the removable device holder with a tablet (an iPad mini) and with a phone.
+The renders are path-traced with Cycles; set OPEN_PEDAL_SAMPLES or OPEN_PEDAL_VIEWS for a quicker check.
 Tested with Blender 5.2. The board is the KiCad export
 hardware/kicad/exports/open-pedal-board.glb (run hardware/kicad/scripts/build.py
 first); jacks, pots, LED-ring footswitches and the display are simplified stand-ins.
@@ -55,41 +56,111 @@ C_SHELL, C_CONTROLS, C_REAR, C_BOARD, C_LABELS, C_HOLDER, C_DEVICE, C_STAGE = (
                             "Device holder", "Example devices", "Stage"))
 
 
-def material(name, color, metallic=0.0, roughness=0.5, emission=None, strength=0.0, alpha=1.0):
+def material(name, color, metallic=0.0, roughness=0.5, emission=None, strength=0.0, alpha=1.0,
+             bevel=0.3, grain=None, coat=0.0):
+    """Principled material. bevel (mm) rounds sharp edges at render time (Cycles bevel node, so the
+    meshes stay simple). grain = (noise scale per metre, bump strength, roughness variation) adds a
+    fine surface texture."""
     m = bpy.data.materials.new(name)
     try:
         m.use_nodes = True
     except Exception:
         pass
-    p = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+    nt = m.node_tree
+    p = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
     p.inputs["Base Color"].default_value = (*color, 1.0)
     p.inputs["Metallic"].default_value = metallic
     p.inputs["Roughness"].default_value = roughness
+    if coat:
+        p.inputs["Coat Weight"].default_value = coat
+        p.inputs["Coat Roughness"].default_value = 0.05
     if emission:
         p.inputs["Emission Color"].default_value = (*emission, 1.0)
         p.inputs["Emission Strength"].default_value = strength
     if alpha < 1.0:
         p.inputs["Alpha"].default_value = alpha
+    normal = None
+    if bevel:
+        bv = nt.nodes.new("ShaderNodeBevel")
+        bv.samples = 4
+        bv.inputs["Radius"].default_value = bevel * MM
+        normal = bv.outputs["Normal"]
+    if grain:
+        scale, bump, rough_var = grain
+        tc = nt.nodes.new("ShaderNodeTexCoord")
+        nz = nt.nodes.new("ShaderNodeTexNoise")
+        nz.inputs["Scale"].default_value = scale
+        nz.inputs["Detail"].default_value = 4.0
+        nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
+        if bump:
+            bp = nt.nodes.new("ShaderNodeBump")
+            bp.inputs["Strength"].default_value = bump
+            bp.inputs["Distance"].default_value = 0.0002
+            nt.links.new(nz.outputs[0], bp.inputs["Height"])
+            if normal:
+                nt.links.new(normal, bp.inputs["Normal"])
+            normal = bp.outputs["Normal"]
+        if rough_var:
+            mr = nt.nodes.new("ShaderNodeMapRange")
+            mr.inputs[3].default_value = max(roughness - rough_var, 0.02)
+            mr.inputs[4].default_value = min(roughness + rough_var, 1.0)
+            nt.links.new(nz.outputs[0], mr.inputs[0])
+            nt.links.new(mr.outputs[0], p.inputs["Roughness"])
+    if normal:
+        nt.links.new(normal, p.inputs["Normal"])
     m.diffuse_color = (*color, alpha)
     return m
 
 
-M_BODY = material("Body black powder coat", (0.012, 0.012, 0.014), metallic=0.1, roughness=0.5)
-M_ALU = material("Bare aluminium", (0.72, 0.73, 0.74), metallic=1.0, roughness=0.35)
-M_CHROME = material("Chrome", (0.9, 0.9, 0.9), metallic=1.0, roughness=0.08)
-M_BLACK = material("Black plastic", (0.015, 0.015, 0.017), roughness=0.45)
-M_RUBBER = material("Rubber", (0.02, 0.02, 0.02), roughness=0.9)
-M_PRINT = material("Label print", (0.92, 0.92, 0.9), roughness=0.6)
-M_GLASS = material("Display glass", (0.005, 0.006, 0.01), roughness=0.05)
-M_OLED = material("Display lit", (0.1, 0.5, 1.0), emission=(0.25, 0.65, 1.0), strength=4.0)
+M_BODY = material("Body black powder coat", (0.014, 0.014, 0.016), metallic=0.0, roughness=0.5,
+                  bevel=1.2, grain=(2500.0, 0.25, 0.08))
+next(n for n in M_BODY.node_tree.nodes if n.type == "BSDF_PRINCIPLED").inputs["Specular IOR Level"].default_value = 0.35
+M_ALU = material("Bare aluminium", (0.72, 0.73, 0.74), metallic=1.0, roughness=0.32, grain=(900.0, 0.0, 0.08))
+M_CHROME = material("Chrome", (0.92, 0.92, 0.93), metallic=1.0, roughness=0.06, bevel=0.5)
+M_BLACK = material("Black plastic", (0.015, 0.015, 0.017), roughness=0.35, bevel=0.6)
+M_RUBBER = material("Rubber", (0.02, 0.02, 0.02), roughness=0.85, bevel=0.6, grain=(1500.0, 0.2, 0.05))
+M_PRINT = material("Label print", (0.86, 0.86, 0.84), roughness=0.55, bevel=0)
+M_GLASS = material("Display glass", (0.005, 0.006, 0.01), roughness=0.04, bevel=0)
+M_OLED = material("Display lit", (0.1, 0.5, 1.0), emission=(0.25, 0.65, 1.0), strength=5.0, bevel=0)
 M_OLED_PCB = material("Display board", (0.02, 0.09, 0.25), roughness=0.5)
-M_LED_ON = material("LED ring lit", (0.2, 1.0, 0.45), emission=(0.1, 1.0, 0.35), strength=6.0)
-M_LED_OFF = material("LED ring dim", (0.75, 0.8, 0.78), roughness=0.25, emission=(0.1, 1.0, 0.35), strength=0.5)
+M_LED_ON = material("LED ring lit", (0.02, 0.5, 0.15), roughness=0.3, emission=(0.03, 1.0, 0.22), strength=5.0,
+                    bevel=0)
+M_LED_OFF = material("LED ring dim", (0.14, 0.20, 0.17), roughness=0.25, emission=(0.03, 1.0, 0.22), strength=0.06,
+                     bevel=0)
 M_BRASS = material("Standoff", (0.78, 0.6, 0.25), metallic=1.0, roughness=0.3)
-M_PRINTED = material("Holder black printed plastic", (0.014, 0.014, 0.015), roughness=0.65)
-M_FOAM = material("Holder foam pad", (0.012, 0.012, 0.012), roughness=1.0)
-M_DEVICE = material("Example device", (0.05, 0.05, 0.055), metallic=0.4, roughness=0.35)
-M_SCREEN = material("Example device screen", (0.1, 0.13, 0.18), roughness=0.1, emission=(0.35, 0.5, 0.75), strength=0.8)
+M_PRINTED = material("Holder black printed plastic", (0.016, 0.016, 0.017), roughness=0.5, bevel=0.5,
+                     grain=(4000.0, 0.3, 0.1))
+M_FOAM = material("Holder foam pad", (0.02, 0.02, 0.02), roughness=1.0, bevel=0.4, grain=(1200.0, 0.8, 0.0))
+M_DEVICE = material("Example device aluminium", (0.33, 0.34, 0.36), metallic=1.0, roughness=0.3, bevel=0.9,
+                    grain=(3000.0, 0.0, 0.05))
+M_DEVICE_GLASS = material("Example device glass", (0.004, 0.004, 0.005), roughness=0.03, bevel=0.2)
+M_LENS = material("Example device camera lens", (0.01, 0.01, 0.015), roughness=0.02, coat=1.0)
+M_UI_TEXT = material("Example app text", (0.9, 0.9, 0.9), roughness=0.05, emission=(0.95, 0.95, 0.92), strength=2.2,
+                     bevel=0)
+M_UI_DIM = material("Example app panel", (0.05, 0.05, 0.06), roughness=0.05, emission=(0.10, 0.11, 0.14),
+                    strength=1.5, bevel=0)
+M_UI_ACCENT = material("Example app accent", (1.0, 0.5, 0.1), roughness=0.05, emission=(1.0, 0.45, 0.08),
+                       strength=2.5, bevel=0)
+
+
+def screen_material():
+    """Lit display: a dark vertical gradient, glossy like the glass above it."""
+    m = material("Example device screen", (0.01, 0.01, 0.015), roughness=0.04, bevel=0)
+    nt = m.node_tree
+    p = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].color = (0.012, 0.016, 0.030, 1.0)
+    ramp.color_ramp.elements[1].color = (0.050, 0.035, 0.075, 1.0)
+    nt.links.new(tc.outputs["Generated"], sep.inputs[0])
+    nt.links.new(sep.outputs[1], ramp.inputs[0])
+    nt.links.new(ramp.outputs["Color"], p.inputs["Emission Color"])
+    p.inputs["Emission Strength"].default_value = 1.6
+    return m
+
+
+M_SCREEN = screen_material()
 
 
 def obj_from_bm(name, bm, coll, mat=None):
@@ -546,17 +617,128 @@ def set_jaws(device_width):
         arm.location.x = sx * half * MM
 
 
-def example_device(name, size):
-    w, h, t = size
-    body = holder_obj("Example " + name, M_DEVICE, coll=C_DEVICE, local=lambda bm: add_rounded_prism(
-        bm, w, h, 6.0, 0.2, 0.2 + t, center=(0, 1.5 + h / 2)))
-    screen = holder_obj("Example " + name + " screen", M_SCREEN, coll=C_DEVICE, local=lambda bm: add_box(
-        bm, (w - 12, h - 12, 0.1), (0, 1.5 + h / 2, 0.25 + t)))
-    screen.parent = body
-    return body, screen
+def local_matrix(x, s_up, n):
+    """Object matrix (metres) for something lying flat on the holder's backrest plane at (x, s, n) mm."""
+    y, z = hw(s_up, n)
+    return Matrix.Translation((x * MM, y * MM, z * MM)) @ Matrix.Rotation(HA, 4, "X")
 
 
-DEVICES = {name: example_device(name, size) for name, size in HD["example_devices"].items()}
+def screen_text(text, x, s_up, n, size, mat):
+    cu = bpy.data.curves.new("screen " + text, "FONT")
+    cu.body = text
+    cu.size = size * MM
+    cu.align_x = "CENTER"
+    cu.align_y = "CENTER"
+    cu.materials.append(mat)
+    ob = bpy.data.objects.new("Example app text " + text, cu)
+    C_DEVICE.objects.link(ob)
+    ob.matrix_world = local_matrix(x, s_up, n)
+    return ob
+
+
+def image_screen_material(path):
+    """Lit display showing an image, glossy like the glass above it."""
+    m = material("Example device screen image", (0.0, 0.0, 0.0), roughness=0.04, bevel=0)
+    nt = m.node_tree
+    p = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(path)
+    tex.extension = "EXTEND"
+    nt.links.new(tex.outputs["Color"], p.inputs["Emission Color"])
+    p.inputs["Emission Strength"].default_value = 3.5
+    return m, tex.image
+
+
+def add_image_quad(bm, w, h, cx, cs, n, v0, v1):
+    """Flat rectangle in the holder frame, UV-mapped to the image rows between v0 and v1."""
+    verts = [bm.verts.new(q) for q in ((cx - w / 2, cs - h / 2, n), (cx + w / 2, cs - h / 2, n),
+                                       (cx + w / 2, cs + h / 2, n), (cx - w / 2, cs + h / 2, n))]
+    face = bm.faces.new(verts)
+    uv = bm.loops.layers.uv.new("UVMap")
+    for loop, co in zip(face.loops, ((0, v0), (1, v0), (1, v1), (0, v1))):
+        loop[uv].uv = co
+
+
+def example_device(key, spec):
+    """A device resting on the ledge: aluminium body, glass front, a lit display and a rear camera if the
+    spec asks for one. The display shows the spec's screen_image, or a generic amp-app screen (preset
+    name and a row of dials) if it has none."""
+    w, h, t = spec["size"]
+    r, bezel = spec["corner_radius"], spec["bezel"]
+    name = spec["name"]
+    s0 = 1.5                                            # bottom edge sits on the ledge pad
+    cs = s0 + h / 2                                     # centre, up the slope
+    n_back, n_front = 0.2, 0.2 + t
+    dw, dh = w - 2 * bezel, h - 2 * bezel               # lit display area
+    parts = []
+
+    def part(suffix, mat, build):
+        ob = holder_obj("Example " + name + suffix, mat, coll=C_DEVICE, local=build)
+        parts.append(ob)
+        return ob
+
+    part("", M_DEVICE, lambda bm: add_rounded_prism(bm, w, h, r, n_back, n_front - 0.3, center=(0, cs)))
+    part(" glass", M_DEVICE_GLASS, lambda bm: add_rounded_prism(
+        bm, w - 1.0, h - 1.0, r - 0.5, n_front - 0.3, n_front, center=(0, cs)))
+    shot = spec.get("screen_image")
+    shot = os.path.join(REPO, shot) if shot else None
+    if shot and os.path.exists(shot):
+        # A screenshot fills the display height; the strips left at the sides take the image's background colour.
+        mat, img = image_screen_material(shot)
+        crop = spec.get("screen_crop_top", 0)            # pixel rows to drop from the top (a window title bar)
+        px_w, px_h = img.size[0], img.size[1] - crop
+        iw = min(dw, dh * px_w / px_h)
+        ih = iw * px_h / px_w
+        backing = material("Example device screen backing", (0.0, 0.0, 0.0), roughness=0.04, bevel=0,
+                           emission=tuple(spec.get("screen_background", (0.011, 0.011, 0.013))), strength=3.5)
+        part(" screen", backing, lambda bm: add_rounded_prism(
+            bm, dw, dh, min(4.0, bezel), n_front, n_front + 0.02, center=(0, cs)))
+        part(" screen image", mat, lambda bm: add_image_quad(bm, iw, ih, 0, cs, n_front + 0.04, 0.0,
+                                                             px_h / img.size[1]))
+        if spec.get("camera"):
+            cx, c_s = w / 2 - 13.0, s0 + h - 13.0
+            part(" camera ring", M_DEVICE, lambda bm: add_cyl(bm, 6.0, (cx, c_s, n_back), (cx, c_s, n_back - 1.2)))
+            part(" camera lens", M_LENS, lambda bm: add_cyl(bm, 4.6, (cx, c_s, n_back - 1.2), (cx, c_s, n_back - 1.3)))
+        return parts
+    if shot:
+        print("WARNING: screen image not found, drawing the generic screen:", shot)
+    part(" screen", M_SCREEN, lambda bm: add_rounded_prism(
+        bm, dw, dh, min(4.0, bezel), n_front, n_front + 0.02, center=(0, cs)))
+    if spec.get("camera"):
+        cx, c_s = w / 2 - 13.0, s0 + h - 13.0
+        part(" camera ring", M_DEVICE, lambda bm: add_cyl(bm, 6.0, (cx, c_s, n_back), (cx, c_s, n_back - 1.2)))
+        part(" camera lens", M_LENS, lambda bm: add_cyl(bm, 4.6, (cx, c_s, n_back - 1.2), (cx, c_s, n_back - 1.3)))
+
+    # generic amp-app screen, sized from the display so it works in landscape and portrait
+    n_ui = n_front + 0.04
+    u = min(dw, dh * 1.5)                               # layout unit
+    top = cs + dh / 2
+    dials = ("GAIN", "BASS", "MID", "TREBLE", "VOLUME") if dw > 120 else ("GAIN", "TONE", "VOL")
+    xs = [(i - (len(dials) - 1) / 2) * dw / (len(dials) + 0.6) for i in range(len(dials))]
+    dial_r = min(dw / (len(dials) + 0.6) * 0.30, dh * 0.11)
+    dial_s = cs - dh * 0.20
+
+    def panels(bm):
+        add_box(bm, (dw - 0.06 * u, 0.09 * u, 0.02), (0, top - 0.085 * u, n_ui))               # top bar
+        for x in xs:
+            add_cyl(bm, dial_r, (x, dial_s, n_ui - 0.01), (x, dial_s, n_ui + 0.01))            # dials
+
+    def accents(bm):
+        add_box(bm, (0.36 * u, 0.006 * u, 0.02), (0, cs + dh * 0.10, n_ui))                    # rule under the name
+        for x, a in zip(xs, (-0.9, 0.5, 0.0, 0.8, -0.3)):                                      # dial pointers
+            add_cyl(bm, dial_r * 0.13, (x + dial_r * 0.6 * math.sin(a), dial_s + dial_r * 0.6 * math.cos(a), n_ui),
+                    (x + dial_r * 0.6 * math.sin(a), dial_s + dial_r * 0.6 * math.cos(a), n_ui + 0.04), 16)
+
+    part(" app panels", M_UI_DIM, panels)
+    part(" app accents", M_UI_ACCENT, accents)
+    texts = [screen_text("BANK 03   PRESET A", 0, top - 0.085 * u, n_ui + 0.03, 0.036 * u, M_UI_TEXT),
+             screen_text("Clean Chime", 0, cs + dh * 0.21, n_ui, 0.105 * u, M_UI_TEXT)]
+    for x, d in zip(xs, dials):
+        texts.append(screen_text(d, x, dial_s - dial_r - 0.035 * u, n_ui, 0.028 * u, M_UI_TEXT))
+    return parts + texts
+
+
+DEVICES = {key: example_device(key, spec) for key, spec in HD["example_devices"].items() if not key.startswith("_")}
 
 
 def show_device(name):
@@ -565,7 +747,7 @@ def show_device(name):
         for ob in parts:
             ob.hide_render = ob.hide_viewport = key != name
     if name:
-        set_jaws(HD["example_devices"][name][0])
+        set_jaws(HD["example_devices"][name]["size"][0])
 
 
 def show_holder(visible):
@@ -576,9 +758,47 @@ def show_holder(visible):
 show_device("tablet")
 
 # ---------------------------------------------------------------- stage: floor, lights, camera
-floor = simple("Floor", C_STAGE, material("Floor", (0.62, 0.62, 0.6), roughness=0.8),
-               lambda bm: add_box(bm, (3000, 3000, 1), (0, 0, -3.0)))
+def floor_material():
+    """Smooth light concrete: large patches of slightly different grey, fine speckle, a little bump."""
+    m = material("Floor", (0.42, 0.41, 0.39), roughness=0.6, bevel=0)
+    nt = m.node_tree
+    p = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    big, fine = nt.nodes.new("ShaderNodeTexNoise"), nt.nodes.new("ShaderNodeTexNoise")
+    big.inputs["Scale"].default_value, big.inputs["Detail"].default_value = 6.0, 8.0
+    fine.inputs["Scale"].default_value, fine.inputs["Detail"].default_value = 900.0, 3.0
+    mix = nt.nodes.new("ShaderNodeMath")
+    mix.operation = "MULTIPLY_ADD"                       # big * 0.8 + fine * 0.2
+    mix.inputs[1].default_value = 0.8
+    scale = nt.nodes.new("ShaderNodeMath")
+    scale.operation = "MULTIPLY"
+    scale.inputs[1].default_value = 0.2
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].position, ramp.color_ramp.elements[0].color = 0.3, (0.115, 0.11, 0.105, 1.0)
+    ramp.color_ramp.elements[1].position, ramp.color_ramp.elements[1].color = 0.75, (0.20, 0.195, 0.185, 1.0)
+    rough = nt.nodes.new("ShaderNodeMapRange")
+    rough.inputs[3].default_value, rough.inputs[4].default_value = 0.45, 0.75
+    bump = nt.nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 0.12
+    bump.inputs["Distance"].default_value = 0.0004
+    for nz in (big, fine):
+        nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
+    nt.links.new(fine.outputs[0], scale.inputs[0])
+    nt.links.new(big.outputs[0], mix.inputs[0])
+    nt.links.new(scale.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], ramp.inputs[0])
+    nt.links.new(ramp.outputs["Color"], p.inputs["Base Color"])
+    nt.links.new(big.outputs[0], rough.inputs[0])
+    nt.links.new(rough.outputs[0], p.inputs["Roughness"])
+    nt.links.new(fine.outputs[0], bump.inputs["Height"])
+    nt.links.new(bump.outputs["Normal"], p.inputs["Normal"])
+    return m
 
+
+floor = simple("Floor", C_STAGE, floor_material(), lambda bm: add_box(bm, (6000, 6000, 1), (0, 0, -3.0)))
+
+# Image-based light from the interior HDRI that ships with Blender, for natural reflections in the
+# black and chrome parts. Falls back to a plain sky colour if the file is not there.
 world = bpy.data.worlds.new("World")
 scene.world = world
 try:
@@ -586,30 +806,42 @@ try:
 except Exception:
     pass
 bg = next(n for n in world.node_tree.nodes if n.type == "BACKGROUND")
-bg.inputs["Color"].default_value = (0.75, 0.78, 0.82, 1.0)
-bg.inputs["Strength"].default_value = 0.25
+HDRI = os.path.join(bpy.utils.system_resource("DATAFILES"), "studiolights", "world", "interior.exr")
+if os.path.exists(HDRI):
+    env = world.node_tree.nodes.new("ShaderNodeTexEnvironment")
+    env.image = bpy.data.images.load(HDRI)
+    world.node_tree.links.new(env.outputs["Color"], bg.inputs["Color"])
+    bg.inputs["Strength"].default_value = 0.30
+else:
+    print("WARNING: bundled HDRI not found, using a plain world:", HDRI)
+    bg.inputs["Color"].default_value = (0.75, 0.78, 0.82, 1.0)
+    bg.inputs["Strength"].default_value = 0.4
 
 
-def light(name, kind, loc, energy, size=0.3):
+def light(name, kind, loc, energy, size=0.3, color=(1.0, 1.0, 1.0)):
     data = bpy.data.lights.new(name, kind)
     data.energy = energy
+    data.color = color
     if kind == "AREA":
         data.size = size
     ob = bpy.data.objects.new(name, data)
     ob.location = loc
-    ob.rotation_euler = (Vector((0, 0, 0.015)) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
+    ob.rotation_euler = (Vector((0, 0.02, 0.04)) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
     C_STAGE.objects.link(ob)
     return ob
 
 
-light("Key", "AREA", (-0.25, -0.30, 0.45), 5.0, 0.4)
-light("Fill", "AREA", (0.35, -0.15, 0.30), 1.5, 0.5)
-light("Rim", "AREA", (0.10, 0.40, 0.35), 3.5, 0.4)
+# three softboxes: a large warm key above the player's left, a cool fill, and a rim from behind
+light("Key", "AREA", (-0.45, -0.40, 0.70), 11.0, 0.7, (1.0, 0.96, 0.90))
+light("Fill", "AREA", (0.60, -0.30, 0.40), 2.5, 0.8, (0.90, 0.95, 1.0))
+light("Rim", "AREA", (0.25, 0.65, 0.55), 9.0, 0.6)
 
 cam_data = bpy.data.cameras.new("Camera")
 cam_data.lens = 55
 cam_data.clip_start = 0.01
 cam_data.clip_end = 20
+cam_data.dof.use_dof = True                              # slight lens blur away from the focus point
+cam_data.dof.aperture_fstop = 22.0
 cam = bpy.data.objects.new("Camera", cam_data)
 C_STAGE.objects.link(cam)
 scene.camera = cam
@@ -618,15 +850,26 @@ scene.camera = cam
 def aim(loc, target):
     cam.location = loc
     cam.rotation_euler = (Vector(target) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
+    cam_data.dof.focus_distance = (Vector(target) - Vector(loc)).length
 
 
-scene.render.engine = "BLENDER_EEVEE"
+# Path-traced renders on the CPU (works everywhere; a discrete GPU can be selected in the .blend).
+scene.render.engine = "CYCLES"
 scene.render.resolution_x = 1600
 scene.render.resolution_y = 1000
 scene.render.image_settings.file_format = "PNG"
+scene.render.use_persistent_data = True
+scene.cycles.device = "CPU"
+scene.cycles.samples = int(os.environ.get("OPEN_PEDAL_SAMPLES", "192"))
+scene.cycles.use_adaptive_sampling = True
+scene.cycles.adaptive_threshold = 0.02
+scene.cycles.use_denoising = True
+scene.cycles.max_bounces = 8
+scene.cycles.caustics_reflective = False
+scene.cycles.caustics_refractive = False
+scene.view_settings.view_transform = "AgX"
 try:
-    scene.eevee.taa_render_samples = 64
-    scene.eevee.use_raytracing = True
+    scene.view_settings.look = "AgX - Medium High Contrast"
 except Exception:
     pass
 
@@ -638,18 +881,23 @@ bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, "open-pedal.blend"))
 scene.render.use_stamp_filename = False  # keep the local .blend path out of the PNG metadata
 
 
+VIEWS = [v for v in os.environ.get("OPEN_PEDAL_VIEWS", "").split(",") if v]   # limit the views, for quick checks
+
+
 def render(name):
+    if VIEWS and name.split(".")[0] not in VIEWS:
+        return
     scene.render.filepath = os.path.join(HERE, "renders", name)
     bpy.ops.render.render(write_still=True)
 
 
 # the holder with a tablet, from the front and the rear, then with a phone
-aim((-0.34, -0.68, 0.52), (0, 0.06, 0.095))
+aim((-0.27, -0.56, 0.42), (0, 0.035, 0.07))
 render("holder-tablet.png")
-aim((0.40, 0.60, 0.44), (0, 0.07, 0.08))
+aim((0.33, 0.52, 0.36), (0, 0.06, 0.07))
 render("holder-rear.png")
 show_device("phone")
-aim((-0.24, -0.46, 0.38), (0, 0.04, 0.07))
+aim((-0.27, -0.53, 0.45), (0, 0.04, 0.085))
 render("holder-phone.png")
 show_device("tablet")
 

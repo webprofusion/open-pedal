@@ -7,6 +7,12 @@ A cheap, open-source guitar audio dock: a USB-C class-compliant audio interface 
 - Six footswitches: Bank −, Bank +, presets A to D
 - RP2040, PCM1808 ADC, PCM5102A DAC; about US$52 in parts
 
+![The dock with the device holder fitted and an iPad mini in it](enclosure/renders/holder-tablet.png)
+
+![The dock on its own, seen from the front](enclosure/renders/front.png)
+
+The images are renders of the enclosure model, not photos.
+
 Status: design stage. Nothing has been built or measured yet.
 
 See [docs/design.md](docs/design.md) for the full hardware design.

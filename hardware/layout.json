@@ -80,6 +80,11 @@
     "mount": {"thread": "M4", "hole_diameter": 4.0, "holes": [[-82.0, 30.5], [82.0, 30.5]]},
     "arms": {"length": 130.0, "width": 16.0, "thickness": 5.0, "s": [30.0, 55.0], "lock_x": 25.0},
     "jaws": {"s": [22.0, 62.0], "wall": 5.0, "depth": 17.0, "lip": 7.0, "pad": 3.0},
-    "example_devices": {"tablet": [250.0, 175.0, 7.0], "phone": [72.0, 150.0, 8.0]}
+    "example_devices": {
+      "_comment": "Devices drawn in the renders. size is width across the holder, height up the slope, thickness. The tablet is an iPad mini (8.3 inch, 195.4 x 134.8 x 6.3 mm) in landscape; the phone is a generic one in portrait. screen_image (optional, path from the repo root) is shown on the display, with screen_crop_top pixel rows cut from its top.",
+      "tablet": {"name": "iPad mini", "size": [195.4, 134.8, 6.3], "corner_radius": 12.0, "bezel": 8.5, "camera": true,
+                 "screen_image": "enclosure/assets/tablet-screen.png", "screen_crop_top": 40},
+      "phone": {"name": "Phone", "size": [72.0, 150.0, 8.0], "corner_radius": 10.0, "bezel": 3.0, "camera": false}
+    }
   }
 }
